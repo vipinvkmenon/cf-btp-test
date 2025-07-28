@@ -54,5 +54,5 @@ jobs:
             echo "githubJwt=$githubJwt" >> $GITHUB_OUTPUT
       - name: BTP Cli test
         run: |
-          btp login --assertion "${{ steps.get-github-jwt.outputs.githubJwt }}" --idp "${{ inputs.idp }}" --cli-server-url https://cli.btp.cloud.sap
+          btp login --jwt "${{ steps.get-github-jwt.outputs.githubJwt }}" --idp "${{ inputs.idp }}" --subdomain "${{ inputs.global_account_id }}" --url https://cli.btp.cloud.sap
         
