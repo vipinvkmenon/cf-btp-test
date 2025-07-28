@@ -1,0 +1,44 @@
+
+name: CLI Based Deploy
+on:
+  workflow_dispatch:
+    inputs:
+      region:
+        description: 'BTP Subaccount Region'
+        required: true
+        default: 'ap10'
+        type: string
+      idp:
+        description: 'Identity Provider'
+        required: true
+        type: string
+      global_account_id:
+        description: 'Global Account ID'
+        required: true
+        type: string
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    permissions:
+        id-token: write # This is required for requesting the JWT
+        contents: read  # This is required for actions/checkout
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v2
+      - name: Brew install btp
+        run: |
+          brew install --cask btp
+      - name: Brew install cf
+        run: |
+           brew install cloudfoundry/tap/cf-cli@8
+        
+      - name: Get short-lived GitHub-issued JWT
+        id: get-github-jwt
+        run: |
+            githubJwt=$(curl -s -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" -H "Accept: application/json; api-version=2.0" -H "Content-Type: application/json" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=${{inputs.tenantIssuerUri}}" | jq -r '.value')
+            echo $githubJwt | jq -R 'split(".") | .[0],.[1] | @base64d | fromjson'
+            echo "githubJwt=$githubJwt" >> $GITHUB_OUTPUT
+      - name: BTP Cli test
+        run: |
+          btp login --assertion "${{ steps.get-github-jwt.outputs.githubJwt }}" --idp "${{ inputs.idp }}" --cli-server-url https://cli.btp.cloud.sap
+        
