@@ -1,3 +1,4 @@
+
 name: Deploy
 on:
   workflow_dispatch:
@@ -18,6 +19,9 @@ on:
 jobs:
   deploy:
     runs-on: ubuntu-latest
+    permissions:
+        id-token: write # This is required for requesting the JWT
+        contents: read  # This is required for actions/checkout
     steps:
       - name: Checkout code
         uses: actions/checkout@v2
@@ -43,3 +47,9 @@ jobs:
           export BTP_ASSERTION=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
           export CF_ASSERTION_TOKEN=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
           terraform apply -auto-approve -var "region=${{ inputs.region }}" -var "idp=${{ inputs.idp }}" -var "global_account_id=${{ inputs.global_account_id }}"
+      - name: Terraform Destroy
+        run: |
+          export BTP_ASSERTION=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
+          export CF_ASSERTION_TOKEN=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
+          terraform destroy -auto-approve
+        
