@@ -12,5 +12,5 @@ variable "idp" {
 variable "region" {
   type        = string
   description = "region"
-  default     = null
+  default     = "ap10"
 }
