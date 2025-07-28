@@ -46,7 +46,7 @@ jobs:
         run: |
           export BTP_ASSERTION=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
           export CF_ASSERTION_TOKEN=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
-          terraform apply -auto-approve -var "region=${{ inputs.region }}" -var "idp=${{ inputs.idp }}" -var "global_account_id=${{ inputs.global_account_id }}"
+          terraform apply -auto-approve -var "region=${{ inputs.region }}" -var "idp=${{ inputs.idp }}" -var "globalaccount=${{ inputs.global_account_id }}"
       - name: Terraform Destroy
         run: |
           export BTP_ASSERTION=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
