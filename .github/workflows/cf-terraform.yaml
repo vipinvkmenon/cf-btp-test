@@ -13,9 +13,10 @@ on:
         required: true
         type: string
       api:
-        description: 'Global Account ID'
+        description: 'API'
         required: true
         type: string
+        default: 'https://api.cf.eu10.hana.ondemand.com'
 jobs:
   deploy:
     runs-on: ubuntu-latest
@@ -33,7 +34,7 @@ jobs:
           terraform_version: latest
 
       - name: Initialize Terraform
-        run: terraform -chdir cfonly init
+        run: terraform -chdir=cfonly init
 
       - name: Get short-lived GitHub-issued JWT
         id: get-github-jwt
@@ -46,7 +47,7 @@ jobs:
         run: |
           export BTP_ASSERTION="${{ steps.get-github-jwt.outputs.githubJwt }}"
           export CF_ASSERTION_TOKEN="${{ steps.get-github-jwt.outputs.githubJwt }}"
-          terraform -chdir cfonly apply -auto-approve -var "api=${{ inputs.api }}" -var "idp=${{ inputs.idp }}" -var "org=${{ inputs.org }}"
+          terraform -chdir=cfonly apply -auto-approve -var "api=${{ inputs.api }}" -var "idp=${{ inputs.idp }}" -var "org=${{ inputs.org }}"
       - name: Terraform Destroy
         run: |
           export BTP_ASSERTION=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
