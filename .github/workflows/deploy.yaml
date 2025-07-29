@@ -16,6 +16,10 @@ on:
         description: 'Global Account ID'
         required: true
         type: string
+      tenantIssuerUri:
+        description: 'Issuer URL'
+        required: true
+        type: string
 jobs:
   deploy:
     runs-on: ubuntu-latest
