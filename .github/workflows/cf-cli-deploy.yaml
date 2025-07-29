@@ -1,0 +1,77 @@
+name: CF CLI Deploy
+
+  on:
+    workflow_dispatch:
+      inputs:
+        cfApiEndpointUrl:
+          description: 'Cloud Foundry environment API endpoint'
+          default: '<e.g., https://api.cf.eu10.hana.ondemand.com>'
+          required: true
+          type: string
+        cfOrg:
+          description: 'CF org name'
+          default: '<e.g., myCfOrg>'
+          required: true
+        cfSpace:
+          description: 'CF space name'
+          default: '<e.g., myCfSpace>'
+          required: true
+        userOrigin:
+          description: 'The "origin-identifier" of your custom platform IdP (see origin of the space user)'
+          default: '<e.g., myTenant-platform>'
+          required: true
+          type: string
+        tenantIssuerUri:
+          description: 'Issuer URI of your SAP Cloud Identity Services tenant'
+          default: '<e.g., https://myTenant.accounts.ondemand.com>'
+          required: true
+  
+  jobs:
+    deploy:
+      runs-on: [ ubuntu-latest ]
+      permissions:
+        id-token: write # This is required for requesting the JWT
+        contents: read  # This is required for actions/checkout
+      steps:
+        - name: Show provided parameters
+          run: |
+            echo "Provided parameters:"
+            echo '${{ toJson(inputs) }}' | jq -r 'to_entries | .[] | "- \(.key): \(.value)"'
+
+        - name: Check out repository code
+          uses: actions/checkout@v4
+  
+        - name: Download CF CLI
+          run: |
+            cf_version="8.12.0"
+            mkdir .cfcli
+            curl -L "https://github.com/cloudfoundry/cli/releases/download/v${cf_version}/cf8-cli_${cf_version}_linux_x86-64.tgz" | tar -zvx -C .cfcli
+            echo "$(pwd)/.cfcli" >> "$GITHUB_PATH"
+
+        - name: Get short-lived GitHub-issued JWT
+          id: get-github-jwt
+          run: |
+            githubJwt=$(curl -s -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" -H "Accept: application/json; api-version=2.0" -H "Content-Type: application/json" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=${{inputs.tenantIssuerUri}}" | jq -r '.value')
+            echo $githubJwt | jq -R 'split(".") | .[0],.[1] | @base64d | fromjson'
+            echo "githubJwt=$githubJwt" >> $GITHUB_OUTPUT
+
+        - name: Set Cloud Foundry API
+          run: |
+            cf api ${{inputs.cfApiEndpointUrl}}
+            
+        - name: Login to Cloud Foundry environment
+          run: |
+            cf auth --assertion ${{steps.get-github-jwt.outputs.githubJwt}} --origin ${{inputs.userOrigin}}
+
+        - name: Target Cloud Foundry org and space
+          run: |
+            cf target -o '${{inputs.cfOrg}}' -s '${{inputs.cfSpace}}'
+  
+        - name: Deploy to Cloud Foundry environment
+          run: |          
+            cf push --strategy rolling
+  
+        - name: Logout from Cloud Foundry environment
+          if: always()
+          run: |
+            cf logout
