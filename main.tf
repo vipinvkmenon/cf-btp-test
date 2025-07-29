@@ -7,7 +7,6 @@ resource "btp_subaccount" "project" {
 resource "btp_subaccount_environment_instance" "cloudfoundry" {
   subaccount_id    = btp_subaccount.project.id
   name             = "sample-cf-instance"
-  landscape_label  = "cf-ap10"
   environment_type = "cloudfoundry"
   service_name     = "cloudfoundry"
   plan_name        = "standard"
