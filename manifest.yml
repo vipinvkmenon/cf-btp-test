@@ -1,0 +1,10 @@
+applications:
+- name: github-cf-access
+  disk_quota: 1G
+  instances: 1
+  memory: 256M
+  random-route: true
+  path:
+    ./resources
+  buildpacks:
+    - staticfile_buildpack
