@@ -5,25 +5,21 @@ on:
     inputs:
       cfApiEndpointUrl:
         description: 'Cloud Foundry environment API endpoint'
-        default: '<e.g., https://api.cf.eu10.hana.ondemand.com>'
+        default: 'https://api.cf.eu10.hana.ondemand.com'
         required: true
         type: string
       cfOrg:
         description: 'CF org name'
-        default: '<e.g., myCfOrg>'
         required: true
       cfSpace:
         description: 'CF space name'
-        default: '<e.g., myCfSpace>'
         required: true
       userOrigin:
         description: 'The "origin-identifier" of your custom platform IdP (see origin of the space user)'
-        default: '<e.g., myTenant-platform>'
         required: true
         type: string
       tenantIssuerUri:
         description: 'Issuer URI of your SAP Cloud Identity Services tenant'
-        default: '<e.g., https://myTenant.accounts.ondemand.com>'
         required: true
 
 jobs:
