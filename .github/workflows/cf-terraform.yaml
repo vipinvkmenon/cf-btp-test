@@ -46,7 +46,7 @@ jobs:
         run: |
           export BTP_ASSERTION="${{ steps.get-github-jwt.outputs.githubJwt }}"
           export CF_ASSERTION_TOKEN="${{ steps.get-github-jwt.outputs.githubJwt }}"
-          terraform -chdir cfonly apply -auto-approve -var "api=${{ inputs.api }}" -var "idp=${{ inputs.idp }}" -var "org=${{ inputs.api }}"
+          terraform -chdir cfonly apply -auto-approve -var "api=${{ inputs.api }}" -var "idp=${{ inputs.idp }}" -var "org=${{ inputs.org }}"
       - name: Terraform Destroy
         run: |
           export BTP_ASSERTION=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
