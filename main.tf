@@ -1,6 +1,6 @@
 resource "btp_subaccount" "project" {
   name      = "sample project"
-  subdomain = "sample.project"
+  subdomain = "sampleproject"
   region    = lower(var.region)
 }
 
