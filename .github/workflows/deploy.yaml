@@ -58,10 +58,13 @@ jobs:
             const coredemo = require('@actions/core')
             let id_token = await coredemo.getIDToken(tenanturl)
             coredemo.setOutput('githubJwt', id_token)
+      - name: Print
+        run: |
+          echo ${{ steps.idtoken.outputs }}
 
       - name: Apply Terraform configuration
         run: |
-          export BTP_ASSERTION="${{ steps.get-github-jwt.outputs.githubJwt }}"
+          export BTP_ASSERTION="${{ steps.idtoken.outputs.githubJwt }}"
           export CF_ASSERTION_TOKEN="${{ steps.get-github-jwt.outputs.githubJwt }}"
           terraform apply -auto-approve -var "region=${{ inputs.region }}" -var "idp=${{ inputs.idp }}" -var "globalaccount=${{ inputs.global_account_id }}"
       - name: Terraform Destroy
