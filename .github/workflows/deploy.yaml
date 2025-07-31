@@ -60,7 +60,7 @@ jobs:
             coredemo.setOutput('githubJwt', id_token)
       - name: Print
         run: |
-          jq ${{ steps.idtoken.outputs }}
+          echo ${{ steps.idtoken.outputs }} | jq .
 
       - name: Apply Terraform configuration
         run: |
