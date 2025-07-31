@@ -50,10 +50,13 @@ jobs:
       - name: Get Id Token
         uses: actions/github-script@v7
         id: idtoken
+        env:
+          TENANT_URL: ${{inputs.tenantIssuerUri}}
         with:
           script: |
+            const tenanturl = process.env.TENANT_URL;
             const coredemo = require('@actions/core')
-            let id_token = await coredemo.getIDToken(${{inputs.tenantIssuerUri}})
+            let id_token = await coredemo.getIDToken(tenanturl)
             coredemo.setOutput('githubJwt', id_token)
 
       - name: Apply Terraform configuration
