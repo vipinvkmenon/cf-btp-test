@@ -65,7 +65,7 @@ jobs:
 
       - name: Deploy to Cloud Foundry environment
         run: |          
-          cf push --strategy rolling
+          cf m
 
       - name: Logout from Cloud Foundry environment
         if: always()
