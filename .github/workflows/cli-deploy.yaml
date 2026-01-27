@@ -1,5 +1,5 @@
 
-name: CLI Based Deploy
+name: BTP cli Based Deploy
 on:
   workflow_dispatch:
     inputs:
