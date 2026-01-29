@@ -23,6 +23,7 @@ jobs:
         cwd: cloud_controller_ng
         services: |
            postgres
+           mysql
            uaa
            diego-api
            mockserver
@@ -43,13 +44,15 @@ jobs:
          sudo apt-get install -o Dpkg::Options::="--force-overwrite" $PACKAGES -y
          cf --help
     - name: Setup DB stuff
+      continue-on-error: true
       run: |
         sudo chmod -R 777 cloud_controller_ng
         cd cloud_controller_ng
-        sed '/setupMariadb || tee tmp\/fail &/d' .devcontainer/scripts/setupDevelopmentEnvironment.sh > .devcontainer/scripts/setupDevelopmentEnvironment1.sh
-        chmod 777 .devcontainer/scripts/setupDevelopmentEnvironment1.sh
-        .devcontainer/scripts/setupDevelopmentEnvironment1.sh
+        #sed '/setupMariadb || tee tmp\/fail &/d' .devcontainer/scripts/setupDevelopmentEnvironment.sh > .devcontainer/scripts/setupDevelopmentEnvironment1.sh
+        #chmod 777 .devcontainer/scripts/setupDevelopmentEnvironment1.sh
+        .devcontainer/scripts/setupDevelopmentEnvironment.sh
     - name: Setup credhub cli
+      continue-on-error: true
       run: |
             wget "$(curl -s https://api.github.com/repos/cloudfoundry/credhub-cli/releases/latest |
             jq -r '.assets[] | select(.name|match("credhub-linux.*")) | .browser_download_url')" -O /tmp/credhub.tar.gz
@@ -58,7 +61,27 @@ jobs:
             ls /tmp
             echo ----
             sudo rm -f /tmp/credhub.tar.gz && sudo mv credhub /usr/bin
-            credhub --help
+            credhub --version
+    - name: UAAC Init
+      continue-on-error: true
+      run: |
+          uaac target http://localhost:8080
+          uaac token client get admin -s "adminsecret"
+    - name: Start cc api
+      continue-on-error: true
+      run: |
+         DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb ./bin/cloud_controller -c ./tmp/cloud_controller.yml
+         sleep 30
+         DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb CLOUD_CONTROLLER_NG_CONFIG=./tmp/cloud_controller.yml bundle exec rake jobs:local
+         sleep 30
+         DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb CLOUD_CONTROLLER_NG_CONFIG=./tmp/cloud_controller.yml bundle exec rake clock:start
+    - name: Check with cf
+      run: |
+        cf api http://localhost
+        cf login -u ccadmin -p secret
+        
+         
+    
          
          
 
