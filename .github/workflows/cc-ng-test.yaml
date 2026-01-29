@@ -55,7 +55,7 @@ jobs:
             echo -----
             ls /tmp
             echo ----
-            sudo rm -f /tmp/credhub.tar.gz && sudo mv /tmp/credhub /usr/bin
+            sudo rm -f /tmp/credhub.tar.gz && sudo mv credhub /usr/bin
             credhub --help
          
          
