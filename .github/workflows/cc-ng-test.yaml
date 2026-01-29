@@ -1,0 +1,15 @@
+name: CC-NG Test
+
+on:
+  workflow_dispatch:
+  
+jobs:
+  Rubocop:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: hmarr/debug-action@v3
+    - uses: actions/checkout@v6
+      with:
+        repository: cloudfoundry/cloud_controller_ng
+        path: cloud_controller_ng
+    - uses: ./cloud_controller_ng/.github/workflows/composite/setup
