@@ -16,7 +16,7 @@ jobs:
     - uses: ./cloud_controller_ng/.github/workflows/composite/setup
       with:
         WORKING_DIRECTORY: cloud_controller_ng
-    - run: cp -r cloud_controller_ng /tmp/
+    - uses: chrisdickinson/setup-yq@latest
     - uses: hoverkraft-tech/compose-action@05da55b2bb8a5a759d1c4732095044bd9018c050
       with:
         cwd: cloud_controller_ng
@@ -29,7 +29,25 @@ jobs:
            minio
            catsbroker
            nginx
-    - run: |
-         gem install cf-uaac
+    - name: Setup cf-uaac
+      run: gem install cf-uaac
+    - name: Install clients
+      run: |
+         set -x
+         PACKAGES="cf8-cli postgresql-client postgresql-client-common mariadb-client"
+         wget -q -O - https://packages.cloudfoundry.org/debian/cli.cloudfoundry.org.key | sudo apt-key add -
+         echo "deb https://packages.cloudfoundry.org/debian stable main" | sudo tee /etc/apt/sources.list.d/cloudfoundry-cli.list
+         sudo apt-get update
+         export DEBIAN_FRONTEND="noninteractive" && echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections
+         sudo apt-get install -o Dpkg::Options::="--force-overwrite" $PACKAGES -y
+         cf --help
+    - name: Setup credhub cli
+      run: |
+            wget "$(curl -s https://api.github.com/repos/cloudfoundry/credhub-cli/releases/latest |
+            jq -r '.assets[] | select(.name|match("credhub-linux.*")) | .browser_download_url')" -O /tmp/credhub.tar.gz
+            sudo tar -xzf /tmp/credhub.tar.gz && sudo rm -f /tmp/credhub.tar.gz && sudo mv /tmp/credhub /usr/bin
+            credhub --help
+         
+         
 
         
