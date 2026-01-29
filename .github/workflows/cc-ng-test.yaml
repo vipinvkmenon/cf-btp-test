@@ -16,7 +16,6 @@ jobs:
     - uses: ./cloud_controller_ng/.github/workflows/composite/setup
       with:
         WORKING_DIRECTORY: cloud_controller_ng
-    - uses: masa-iwasaki/setup-rbenv@v1
     - run: cp -r cloud_controller_ng /tmp/
     - uses: hoverkraft-tech/compose-action@05da55b2bb8a5a759d1c4732095044bd9018c050
       with:
@@ -30,6 +29,7 @@ jobs:
            minio
            catsbroker
            nginx
-    - run: .devcontainer/images/devcontainer/setup.sh
+    - run: |
+         gem install cf-uaac
 
         
