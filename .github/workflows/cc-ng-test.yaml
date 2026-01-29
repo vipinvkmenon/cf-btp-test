@@ -12,4 +12,5 @@ jobs:
       with:
         repository: cloudfoundry/cloud_controller_ng
         path: cloud_controller_ng
-    - uses: ./cloud_controller_ng/.github/workflows/composite/setup
+    - run: cp ./cloud_controller_ng/.github/workflows/composite/setup ./cloud_controller_ng/setup
+    - uses: ./cloud_controller_ng/setup
