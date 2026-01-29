@@ -44,7 +44,7 @@ jobs:
     - name: Setup DB stuff
       run: |
         cd cloud_controller_ng
-        .devcontainer/scripts/setupDevelopmentEnvironment.sh
+        sudo .devcontainer/scripts/setupDevelopmentEnvironment.sh
     - name: Setup credhub cli
       run: |
             wget "$(curl -s https://api.github.com/repos/cloudfoundry/credhub-cli/releases/latest |
