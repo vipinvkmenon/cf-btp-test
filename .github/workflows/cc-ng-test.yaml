@@ -43,7 +43,7 @@ jobs:
          cf --help
     - name: Setup DB stuff
       run: |
-        chmod -R 777 cloud_controller_ng
+        sudo chmod -R 777 cloud_controller_ng
         cd cloud_controller_ng
         .devcontainer/scripts/setupDevelopmentEnvironment.sh
     - name: Setup credhub cli
