@@ -42,7 +42,9 @@ jobs:
          sudo apt-get install -o Dpkg::Options::="--force-overwrite" $PACKAGES -y
          cf --help
     - name: Setup DB stuff
-      run: ./cloud_controller_ng/.devcontainer/scripts/setupDevelopmentEnvironment.sh
+      run: |
+        cd cloud_controller_ng
+        .devcontainer/scripts/setupDevelopmentEnvironment.sh
     - name: Setup credhub cli
       run: |
             wget "$(curl -s https://api.github.com/repos/cloudfoundry/credhub-cli/releases/latest |
