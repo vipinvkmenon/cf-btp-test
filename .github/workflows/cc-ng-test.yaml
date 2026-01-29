@@ -41,11 +41,17 @@ jobs:
          export DEBIAN_FRONTEND="noninteractive" && echo 'debconf debconf/frontend select Noninteractive' | sudo debconf-set-selections
          sudo apt-get install -o Dpkg::Options::="--force-overwrite" $PACKAGES -y
          cf --help
+    - name: Setup DB stuff
+      run: ./cloud_controller_ng/.devcontainer/scripts/setupDevelopmentEnvironment.sh
     - name: Setup credhub cli
       run: |
             wget "$(curl -s https://api.github.com/repos/cloudfoundry/credhub-cli/releases/latest |
             jq -r '.assets[] | select(.name|match("credhub-linux.*")) | .browser_download_url')" -O /tmp/credhub.tar.gz
-            sudo tar -xzf /tmp/credhub.tar.gz && sudo rm -f /tmp/credhub.tar.gz && sudo mv /tmp/credhub /usr/bin
+            tar -xzf /tmp/credhub.tar.gz 
+            echo -----
+            ls /tmp
+            echo ----
+            sudo rm -f /tmp/credhub.tar.gz && sudo mv /tmp/credhub /usr/bin
             credhub --help
          
          
