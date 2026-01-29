@@ -46,8 +46,9 @@ jobs:
       run: |
         sudo chmod -R 777 cloud_controller_ng
         cd cloud_controller_ng
-        sed '/setupMariadb || tee tmp\/fail &/d' .devcontainer/scripts/setupDevelopmentEnvironment.sh > .devcontainer/scripts/setupDevelopmentEnvironment.sh
-        .devcontainer/scripts/setupDevelopmentEnvironment.sh
+        sed '/setupMariadb || tee tmp\/fail &/d' .devcontainer/scripts/setupDevelopmentEnvironment.sh > .devcontainer/scripts/setupDevelopmentEnvironment1.sh
+        chmod 777 .devcontainer/scripts/setupDevelopmentEnvironment1.sh
+        .devcontainer/scripts/setupDevelopmentEnvironment1.sh
     - name: Setup credhub cli
       run: |
             wget "$(curl -s https://api.github.com/repos/cloudfoundry/credhub-cli/releases/latest |
