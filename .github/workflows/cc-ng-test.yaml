@@ -8,6 +8,8 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 120
     steps:
+    - name: test yq
+      run: yq --version
     - uses: hmarr/debug-action@v3
     - uses: actions/checkout@v6
       with:
@@ -16,7 +18,6 @@ jobs:
     - uses: ./cloud_controller_ng/.github/workflows/composite/setup
       with:
         WORKING_DIRECTORY: cloud_controller_ng
-    - uses: chrisdickinson/setup-yq@latest
     - uses: hoverkraft-tech/compose-action@05da55b2bb8a5a759d1c4732095044bd9018c050
       with:
         cwd: cloud_controller_ng
