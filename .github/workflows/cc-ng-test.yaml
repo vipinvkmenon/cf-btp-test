@@ -7,19 +7,6 @@ jobs:
   Setup-Cloud-Controller-NG:
     runs-on: ubuntu-latest
     timeout-minutes: 120
-    services:
-      postgres:
-        image: "postgres:15"
-        env:
-          POSTGRES_PASSWORD: rootpassword
-        options: >-
-          --tmpfs /var/lib/postgresql/data:rw,size=2g
-          --health-cmd pg_isready
-          --health-interval 10s
-          --health-timeout 5s
-          --health-retries 5
-        ports:
-          - 5432:5432
     steps:
     - uses: hmarr/debug-action@v3
     - uses: actions/checkout@v6
@@ -29,7 +16,20 @@ jobs:
     - uses: ./cloud_controller_ng/.github/workflows/composite/setup
       with:
         WORKING_DIRECTORY: cloud_controller_ng
+    - uses: masa-iwasaki/setup-rbenv@v1
+    - run: cp -r cloud_controller_ng /tmp/
+    - uses: hoverkraft-tech/compose-action@05da55b2bb8a5a759d1c4732095044bd9018c050
+      with:
+        cwd: cloud_controller_ng
+        services: |
+           postgres
+           uaa
+           diego-api
+           mockserver
+           loggregator-metron
+           minio
+           catsbroker
+           nginx
     - run: .devcontainer/images/devcontainer/setup.sh
-      working-directory: cloud_controller_ng
 
         
