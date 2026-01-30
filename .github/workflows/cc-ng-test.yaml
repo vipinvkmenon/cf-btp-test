@@ -94,6 +94,18 @@ jobs:
               echo Try cf
               cf api http://localhost
               cf login -u ccadmin -p secret
+              cf create-org my-test-org
+              cf orgs
+              cf create-space my-test-space -o my-test-org
+              cf spaces
+              cf target -o my-test-org
+              mkdir sample-app
+              cd sample-app
+              echo "Hello World" > index.html
+              cf push samp-app --buildpack https://github.com/cloudfoundry-community/nginx-buildpack.git -m 100m -k 256m
+              
+              
+              
         
          
     
