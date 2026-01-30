@@ -70,6 +70,7 @@ jobs:
     - name: Start cc api
       continue-on-error: true
       run: |
+         cd cloud_controller_ng
          DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb ./bin/cloud_controller -c ./tmp/cloud_controller.yml
          sleep 30
          DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb CLOUD_CONTROLLER_NG_CONFIG=./tmp/cloud_controller.yml bundle exec rake jobs:local
