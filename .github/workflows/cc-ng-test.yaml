@@ -69,17 +69,31 @@ jobs:
           uaac token client get admin -s "adminsecret"
     - name: Start cc api
       continue-on-error: true
-      run: |
-         cd cloud_controller_ng
-         DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb ./bin/cloud_controller -c ./tmp/cloud_controller.yml
-         sleep 30
-         DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb CLOUD_CONTROLLER_NG_CONFIG=./tmp/cloud_controller.yml bundle exec rake jobs:local
-         sleep 30
-         DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb CLOUD_CONTROLLER_NG_CONFIG=./tmp/cloud_controller.yml bundle exec rake clock:start
-    - name: Check with cf
-      run: |
-        cf api http://localhost
-        cf login -u ccadmin -p secret
+      uses: qoomon/actions--parallel-steps@v1
+      with:
+        steps: |
+          - run: |
+              cd cloud_controller_ng
+              echo starting cloud controller
+              DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb ./bin/cloud_controller -c ./tmp/cloud_controller.yml
+          - run: |
+              cd cloud_controller_ng
+              echo wait for 1 min 
+              sleep 60
+              echo start local worker
+              DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb CLOUD_CONTROLLER_NG_CONFIG=./tmp/cloud_controller.yml bundle exec rake jobs:local
+          - run: |
+               cd cloud_controller_ng
+               echo wait for 1 min 
+               sleep 90
+               echo start scheduler
+               DB_CONNECTION_STRING=mysql2://root:supersecret@127.0.0.1:3306/ccdb CLOUD_CONTROLLER_NG_CONFIG=./tmp/cloud_controller.yml bundle exec rake clock:start
+          - run: |
+              echo wait for 180 seconds
+              sleep 180
+              echo Try cf
+              cf api http://localhost
+              cf login -u ccadmin -p secret
         
          
     
