@@ -20,7 +20,7 @@ resource "btp_subaccount_environment_instance" "cloudfoundry" {
   })
 }
 
-resource "cloudfoundry_space" "space" {
-  name = "dev_space"
-  org  = btp_subaccount_environment_instance.cloudfoundry.platform_id
-}
+#resource "cloudfoundry_space" "space" {
+#  name = "dev_space"
+#  org  = btp_subaccount_environment_instance.cloudfoundry.platform_id
+#}
