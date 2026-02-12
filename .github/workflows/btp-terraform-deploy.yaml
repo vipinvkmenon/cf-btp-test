@@ -55,5 +55,5 @@ jobs:
         run: |
           export BTP_ASSERTION=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
           export CF_ASSERTION_TOKEN=$(echo "${{ steps.get-github-jwt.outputs.githubJwt }}")
-          terraform destroy -auto-approve
+          terraform destroy -auto-approve -var "region=${{ inputs.region }}" -var "idp=${{ inputs.idp }}" -var "globalaccount=${{ inputs.global_account_id }}"
         
