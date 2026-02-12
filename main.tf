@@ -4,8 +4,8 @@ ts = formatdate("YYYYMMDDhhmmss", timestamp())
 }
 
 resource "btp_subaccount" "project" {
-  name      = "sample-project-${local.ts}"
-  subdomain = "sampleproject${local.ts}"
+  name      = "github-jwt-workflow-created-${local.ts}"
+  subdomain = "githubjwtcreated${local.ts}"
   region    = local.region
 }
 
@@ -17,7 +17,7 @@ resource "btp_subaccount_environment_instance" "cloudfoundry" {
   service_name     = "cloudfoundry"
   plan_name        = "standard"
   parameters = jsonencode({
-    instance_name = "sample-cf-instance"
+    instance_name = "-cf-instance-${local.ts}"
   })
 }
 
