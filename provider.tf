@@ -15,7 +15,7 @@ provider "btp" {
 globalaccount = var.globalaccount
   idp           = var.idp
 }
-provider "cloudfoundry" {
-  api_url = "https://api.cf.${var.region}.hana.ondemand.com"
-  origin  = var.idp
-}
+#provider "cloudfoundry" {
+#  api_url = "https://api.cf.${var.region}.hana.ondemand.com"
+#  origin  = var.idp
+#}
