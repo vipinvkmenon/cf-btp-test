@@ -1,10 +1,11 @@
 locals {
 region = lower(var.region)
+ts = formatdate("YYYYMMDDhhmmss", timestamp())
 }
 
 resource "btp_subaccount" "project" {
-  name      = "sample project2"
-  subdomain = "sampleproject2"
+  name      = "sample-project-${local.ts}"
+  subdomain = "sampleproject${local.ts}"
   region    = local.region
 }
 
