@@ -44,21 +44,7 @@ jobs:
         run: |
             githubJwt=$(curl -s -H "Authorization: Bearer $ACTIONS_ID_TOKEN_REQUEST_TOKEN" -H "Accept: application/json; api-version=2.0" -H "Content-Type: application/json" "$ACTIONS_ID_TOKEN_REQUEST_URL&audience=${{inputs.tenantIssuerUri}}" | jq -r '.value')
             echo $githubJwt | jq -R 'split(".") | .[0],.[1] | @base64d | fromjson'
-            #echo "githubJwt=$githubJwt" >> $GITHUB_OUTPUT
-      - name: Install OIDC Client from Core Package
-        run: npm install @actions/core @actions/http-client
-      - name: Get Id Token
-        uses: actions/github-script@v7
-        id: idtoken
-        env:
-          TENANT_URL: ${{inputs.tenantIssuerUri}}
-        with:
-          script: |
-            const tenanturl = process.env.TENANT_URL;
-            const coredemo = require('@actions/core')
-            let id_token = await coredemo.getIDToken(tenanturl)
-            console.log("Retrieved ID Token:", id_token); // 👈 Add this line for debugging
-            coredemo.setOutput('githubJwt', id_token)
+            echo "githubJwt=$githubJwt" >> $GITHUB_OUTPUT
 
       - name: Apply Terraform configuration
         run: |
