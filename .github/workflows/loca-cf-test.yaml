@@ -1,0 +1,372 @@
+# End-to-end test workflow running Cloud Foundry on Kind
+# This workflow sets up a local CF environment and runs Terraform provider tests
+name: E2E Test with Kind and Cloud Foundry
+
+on:
+  workflow_dispatch:
+    inputs:
+      terraform_version:
+        description: 'Terraform version to use'
+        required: false
+        default: '1.14.*'
+        type: string
+      kind_version:
+        description: 'Kind version to use'
+        required: false
+        default: 'v0.31.0'
+        type: string
+      cf_cli_version:
+        description: 'CF CLI version to use'
+        required: false
+        default: '8'
+        type: string
+      debug:
+        description: 'Enable debug logging'
+        required: false
+        default: false
+        type: boolean
+
+permissions:
+  contents: read
+
+env:
+  CF_API_URL: https://api.127-0-0-1.nip.io
+  CF_SKIP_SSL_VALIDATION: true
+
+jobs:
+  e2e-test:
+    name: E2E Test - CF on Kind
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+
+    steps:
+      # ============================================
+      # Step 1: Checkout repository
+      # ============================================
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # ============================================
+      # Step 2: Setup Docker (already available on ubuntu-latest)
+      # ============================================
+      - name: Setup Docker
+        run: |
+          echo "Docker version:"
+          docker --version
+          echo "Docker Compose version:"
+          docker compose version
+          echo "Docker info:"
+          docker info
+
+      # ============================================
+      # Step 3: Install Kind
+      # ============================================
+      - name: Install Kind
+        run: |
+          echo "Installing Kind ${{ inputs.kind_version }}..."
+          curl -Lo ./kind https://kind.sigs.k8s.io/dl/${{ inputs.kind_version }}/kind-linux-amd64
+          chmod +x ./kind
+          sudo mv ./kind /usr/local/bin/kind
+          echo "Kind version:"
+          kind version
+
+      # ============================================
+      # Step 4: Setup Terraform
+      # ============================================
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@b9cd54a3c349d3f38e8881555d616ced269862dd # v3.1.2
+        with:
+          terraform_version: ${{ inputs.terraform_version }}
+          terraform_wrapper: false
+
+      - name: Verify Terraform installation
+        run: terraform version
+
+      # ============================================
+      # Step 5: Install CF CLI
+      # ============================================
+      - name: Install CF CLI
+        run: |
+          echo "Installing CF CLI v${{ inputs.cf_cli_version }}..."
+          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=${{ inputs.cf_cli_version }}&source=github" | tar -zx
+          sudo mv cf /usr/local/bin/cf
+          sudo mv cf8 /usr/local/bin/cf8 2>/dev/null || true
+          echo "CF CLI version:"
+          cf version
+
+      # ============================================
+      # Step 6: Clone kind-deployment repository
+      # ============================================
+      - name: Clone kind-deployment repository
+        run: |
+          git clone https://github.com/cloudfoundry/kind-deployment.git /tmp/kind-deployment
+          cd /tmp/kind-deployment
+          echo "kind-deployment cloned successfully"
+
+      # ============================================
+      # Step 7: Start Cloud Foundry on Kind
+      # ============================================
+      - name: Start Cloud Foundry on Kind
+        working-directory: /tmp/kind-deployment
+        run: |
+          echo "Starting Cloud Foundry on Kind cluster..."
+          echo "This may take several minutes..."
+          make up
+        timeout-minutes: 30
+
+      # ============================================
+      # Step 8: Wait for CF to be ready
+      # ============================================
+      - name: Wait for Cloud Foundry to be ready
+        working-directory: /tmp/kind-deployment
+        run: |
+          echo "Waiting for Cloud Foundry API to be available..."
+          
+          # Source the secrets for CF credentials
+          source temp/secrets.sh
+          
+          # Wait for API to respond
+          max_attempts=30
+          attempt=1
+          while [ $attempt -le $max_attempts ]; do
+            echo "Attempt $attempt/$max_attempts: Checking CF API..."
+            if curl -k -s --max-time 10 https://api.127-0-0-1.nip.io/v3/info > /dev/null 2>&1; then
+              echo "CF API is responding!"
+              break
+            fi
+            echo "CF API not ready yet, waiting 30 seconds..."
+            sleep 30
+            attempt=$((attempt + 1))
+          done
+          
+          if [ $attempt -gt $max_attempts ]; then
+            echo "ERROR: CF API did not become available in time"
+            exit 1
+          fi
+          
+          # Show CF info
+          curl -k -s https://api.127-0-0-1.nip.io/v3/info | jq .
+
+      # ============================================
+      # Step 9: Login to CF and Bootstrap
+      # ============================================
+      - name: Login to CF and Bootstrap
+        working-directory: /tmp/kind-deployment
+        run: |
+          echo "Logging in to Cloud Foundry..."
+          source temp/secrets.sh
+          
+          cf login -a https://api.127-0-0-1.nip.io \
+            -u ccadmin \
+            -p "$CC_ADMIN_PASSWORD" \
+            --skip-ssl-validation
+          
+          echo "Bootstrapping Cloud Foundry (creating org, space, uploading buildpacks)..."
+          make bootstrap
+          
+          echo "Cloud Foundry is ready!"
+          cf target
+
+      # ============================================
+      # Step 10: Store CF credentials for Terraform
+      # ============================================
+      - name: Store CF credentials
+        id: cf-credentials
+        working-directory: /tmp/kind-deployment
+        run: |
+          source temp/secrets.sh
+          echo "CF_PASSWORD=$CC_ADMIN_PASSWORD" >> $GITHUB_OUTPUT
+          echo "CF_USER=ccadmin" >> $GITHUB_OUTPUT
+
+      # ============================================
+      # Step 11: Create Terraform configuration
+      # ============================================
+      - name: Create Terraform configuration
+        run: |
+          mkdir -p /tmp/terraform-test
+          cat > /tmp/terraform-test/main.tf << 'EOF'
+          terraform {
+            required_providers {
+              cloudfoundry = {
+                source  = "cloudfoundry/cloudfoundry"
+              }
+            }
+          }
+
+          provider "cloudfoundry" {
+            api_url             = var.cf_api_url
+            user                = var.cf_user
+            password            = var.cf_password
+            skip_ssl_validation = true
+          }
+
+          variable "cf_api_url" {
+            type        = string
+            description = "Cloud Foundry API URL"
+          }
+
+          variable "cf_user" {
+            type        = string
+            description = "Cloud Foundry username"
+          }
+
+          variable "cf_password" {
+            type        = string
+            sensitive   = true
+            description = "Cloud Foundry password"
+          }
+
+          # Data source to verify provider connectivity
+          data "cloudfoundry_org" "test_org" {
+            name = "test"
+          }
+
+          data "cloudfoundry_space" "test_space" {
+            name = "test"
+            org  = data.cloudfoundry_org.test_org.id
+          }
+
+          # Create a new organization
+          resource "cloudfoundry_org" "e2e_test_org" {
+            name = "e2e-test-org"
+            labels = {
+              "purpose" = "e2e-testing"
+            }
+          }
+
+          # Create a space within the organization
+          resource "cloudfoundry_space" "e2e_test_space" {
+            name = "e2e-test-space"
+            org  = cloudfoundry_org.e2e_test_org.id
+            labels = {
+              "purpose" = "e2e-testing"
+            }
+          }
+
+          # Outputs
+          output "test_org_id" {
+            value = data.cloudfoundry_org.test_org.id
+          }
+
+          output "test_space_id" {
+            value = data.cloudfoundry_space.test_space.id
+          }
+
+          output "e2e_org_id" {
+            value = cloudfoundry_org.e2e_test_org.id
+          }
+
+          output "e2e_space_id" {
+            value = cloudfoundry_space.e2e_test_space.id
+          }
+          EOF
+          
+          echo "Terraform configuration created:"
+          cat /tmp/terraform-test/main.tf
+
+      # ============================================
+      # Step 12: Terraform Init
+      # ============================================
+      - name: Terraform Init
+        working-directory: /tmp/terraform-test
+        run: terraform init
+
+      # ============================================
+      # Step 13: Terraform Plan
+      # ============================================
+      - name: Terraform Plan
+        working-directory: /tmp/terraform-test
+        env:
+          TF_VAR_cf_api_url: ${{ env.CF_API_URL }}
+          TF_VAR_cf_user: ${{ steps.cf-credentials.outputs.CF_USER }}
+          TF_VAR_cf_password: ${{ steps.cf-credentials.outputs.CF_PASSWORD }}
+        run: terraform plan -out=tfplan
+
+      # ============================================
+      # Step 14: Terraform Apply
+      # ============================================
+      - name: Terraform Apply
+        working-directory: /tmp/terraform-test
+        env:
+          TF_VAR_cf_api_url: ${{ env.CF_API_URL }}
+          TF_VAR_cf_user: ${{ steps.cf-credentials.outputs.CF_USER }}
+          TF_VAR_cf_password: ${{ steps.cf-credentials.outputs.CF_PASSWORD }}
+        run: |
+          terraform apply -auto-approve tfplan
+          echo ""
+          echo "Terraform outputs:"
+          terraform output
+
+      # ============================================
+      # Step 15: Verify resources in CF
+      # ============================================
+      - name: Verify resources in CF
+        run: |
+          echo "Verifying created resources in Cloud Foundry..."
+          echo ""
+          echo "Organizations:"
+          cf orgs
+          echo ""
+          echo "Spaces in e2e-test-org:"
+          cf target -o e2e-test-org
+          cf spaces
+
+      # ============================================
+      # Step 16: Terraform Destroy
+      # ============================================
+      - name: Terraform Destroy
+        working-directory: /tmp/terraform-test
+        env:
+          TF_VAR_cf_api_url: ${{ env.CF_API_URL }}
+          TF_VAR_cf_user: ${{ steps.cf-credentials.outputs.CF_USER }}
+          TF_VAR_cf_password: ${{ steps.cf-credentials.outputs.CF_PASSWORD }}
+        run: |
+          echo "Destroying Terraform-managed resources..."
+          terraform destroy -auto-approve
+          echo "Terraform destroy completed successfully"
+
+      # ============================================
+      # Step 17: Shutdown Cloud Foundry on Kind
+      # ============================================
+      - name: Shutdown Cloud Foundry on Kind
+        if: always()
+        working-directory: /tmp/kind-deployment
+        run: |
+          echo "Shutting down Cloud Foundry on Kind..."
+          make down || true
+          echo "Cloud Foundry shutdown completed"
+
+      # ============================================
+      # Step 18: Cleanup
+      # ============================================
+      - name: Cleanup
+        if: always()
+        run: |
+          echo "Cleaning up..."
+          rm -rf /tmp/terraform-test || true
+          rm -rf /tmp/kind-deployment || true
+          
+          # Ensure Kind cluster is deleted
+          kind delete cluster --name cfk8s 2>/dev/null || true
+          
+          echo "Cleanup completed"
+
+      # ============================================
+      # Debug: Show logs on failure
+      # ============================================
+      - name: Debug - Show Kind logs on failure
+        if: failure() && inputs.debug
+        run: |
+          echo "=== Kind cluster info ==="
+          kind get clusters || true
+          
+          echo "=== Kubernetes pods ==="
+          kubectl get pods -A 2>/dev/null || true
+          
+          echo "=== Docker containers ==="
+          docker ps -a
+          
+          echo "=== Kind deployment logs ==="
+          if [ -d /tmp/kind-deployment/temp ]; then
+            ls -la /tmp/kind-deployment/temp/
+          fi
