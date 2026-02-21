@@ -85,14 +85,12 @@ jobs:
       # ============================================
       # Step 5: Install CF CLI
       # ============================================
-      - name: Install CF CLI
+      - name: Download CF CLI
         run: |
-          echo "Installing CF CLI v${{ inputs.cf_cli_version }}..."
-          curl -L "https://packages.cloudfoundry.org/stable?release=linux64-binary&version=${{ inputs.cf_cli_version }}&source=github" | tar -zx
-          sudo mv cf /usr/local/bin/cf
-          sudo mv cf8 /usr/local/bin/cf8 2>/dev/null || true
-          echo "CF CLI version:"
-          cf version
+          cf_version="8.12.0"
+          mkdir .cfcli
+          curl -L "https://github.com/cloudfoundry/cli/releases/download/v${cf_version}/cf8-cli_${cf_version}_linux_x86-64.tgz" | tar -zvx -C .cfcli
+          echo "$(pwd)/.cfcli" >> "$GITHUB_PATH"
 
       # ============================================
       # Step 6: Clone kind-deployment repository
