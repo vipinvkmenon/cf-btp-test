@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Read-only GitHub OIDC -> IAS -> SCIM proof of concept."""
+"""Read-only GitHub OIDC -> IAS -> SCIM POC with safe diagnostics."""
 
 import json
 import os
@@ -7,20 +7,36 @@ import re
 import sys
 from urllib.error import HTTPError, URLError
 from urllib.parse import parse_qsl, urlencode, urlparse, urlunparse
-from urllib.request import (
-    HTTPRedirectHandler,
-    Request,
-    build_opener,
-)
+from urllib.request import HTTPRedirectHandler, Request, build_opener
+
 
 JWT_CLIENT_AUTH = (
     "urn:ietf:params:oauth:client-assertion-type:jwt-bearer"
 )
 JWT_BEARER_GRANT = "urn:ietf:params:oauth:grant-type:jwt-bearer"
 
+SAFE_OAUTH_ERRORS = {
+    "invalid_request",
+    "invalid_client",
+    "invalid_grant",
+    "unauthorized_client",
+    "unsupported_grant_type",
+    "invalid_scope",
+    "invalid_target",
+    "access_denied",
+    "login_required",
+    "server_error",
+    "temporarily_unavailable",
+}
+
+MAX_RESPONSE_BYTES = 1024 * 1024
+
 
 class POCError(Exception):
-    pass
+    def __init__(self, message, *, http_status=None, oauth_error=None):
+        super().__init__(message)
+        self.http_status = http_status
+        self.oauth_error = oauth_error
 
 
 class NoRedirects(HTTPRedirectHandler):
@@ -28,7 +44,7 @@ class NoRedirects(HTTPRedirectHandler):
         return None
 
 
-# Standard TLS verification remains enabled. Redirects are refused.
+# Uses standard TLS verification and refuses redirects.
 OPENER = build_opener(NoRedirects())
 
 
@@ -48,7 +64,7 @@ def check_https(url):
             and parsed.username is None
             and parsed.password is None
             and not parsed.fragment
-            and not any(c.isspace() for c in url)
+            and not any(character.isspace() for character in url)
         )
     except ValueError:
         valid = False
@@ -58,6 +74,7 @@ def check_https(url):
 
 
 def mask(token):
+    # Keep stdout available for the final JSON result.
     if os.environ.get("GITHUB_ACTIONS") == "true":
         escaped = (
             token.replace("%", "%25")
@@ -67,8 +84,16 @@ def mask(token):
         print(f"::add-mask::{escaped}", file=sys.stderr)
 
 
+def read_json(response):
+    raw = response.read(MAX_RESPONSE_BYTES + 1)
+    if len(raw) > MAX_RESPONSE_BYTES:
+        raise ValueError("Response too large")
+    return json.loads(raw)
+
+
 def request_json(url, *, form=None, bearer=None, label):
     check_https(url)
+
     headers = {"Accept": "application/json"}
     data = None
 
@@ -83,14 +108,42 @@ def request_json(url, *, form=None, bearer=None, label):
 
     try:
         with OPENER.open(request, timeout=30) as response:
-            payload = json.load(response)
+            payload = read_json(response)
+
     except HTTPError as exc:
-        # Do not print response bodies: they could echo tokens or user data.
         status = exc.code
-        exc.close()
-        raise POCError(f"{label}: HTTP {status}") from None
+        oauth_error = None
+
+        try:
+            body = read_json(exc)
+            candidate = (
+                body.get("error") if isinstance(body, dict) else None
+            )
+
+            # Only emit known OAuth codes. Never print arbitrary error
+            # descriptions, response bodies, tokens or identity records.
+            if (
+                isinstance(candidate, str)
+                and candidate in SAFE_OAUTH_ERRORS
+            ):
+                oauth_error = candidate
+
+        except (ValueError, OSError):
+            pass
+
+        finally:
+            exc.close()
+
+        suffix = f" ({oauth_error})" if oauth_error else ""
+        raise POCError(
+            f"{label}: HTTP {status}{suffix}",
+            http_status=status,
+            oauth_error=oauth_error,
+        ) from None
+
     except (URLError, TimeoutError, OSError):
         raise POCError(f"{label}: network/TLS failure") from None
+
     except ValueError:
         raise POCError(f"{label}: invalid JSON response") from None
 
@@ -100,18 +153,21 @@ def request_json(url, *, form=None, bearer=None, label):
     return payload
 
 
-def github_jwt(audience):
+def get_github_jwt(audience):
     request_url = required("ACTIONS_ID_TOKEN_REQUEST_URL")
     request_token = required("ACTIONS_ID_TOKEN_REQUEST_TOKEN")
     check_https(request_url)
 
     parsed = urlparse(request_url)
+
+    # Replace any existing audience and encode the exact requested value.
     query = [
         (key, value)
         for key, value in parse_qsl(parsed.query)
         if key != "audience"
     ]
     query.append(("audience", audience))
+
     request_url = urlunparse(
         parsed._replace(query=urlencode(query))
     )
@@ -121,120 +177,59 @@ def github_jwt(audience):
         bearer=request_token,
         label="GitHub OIDC issuance",
     )
-    token = payload.get("value")
 
-    if not isinstance(token, str) or not re.fullmatch(
+    assertion = payload.get("value")
+
+    if not isinstance(assertion, str) or not re.fullmatch(
         r"[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+",
-        token,
+        assertion,
     ):
         raise POCError("GitHub did not return a compact JWT.")
 
-    mask(token)
-    return token
+    # This is syntax checking only. IAS verifies signature and claims.
+    mask(assertion)
+    return assertion
 
 
-def main():
-    stage = "configuration"
-    token_acquired = False
+def failure_hint(stage, error):
+    if stage == "github_oidc":
+        return (
+            "Check id-token: write, GitHub OIDC availability "
+            "and runner connectivity."
+        )
 
-    try:
-        tenant = required("SCI_TENANT_URL").rstrip("/")
-        check_https(tenant)
-        if urlparse(tenant).query:
-            raise POCError("SCI_TENANT_URL must not contain a query.")
-
-        client_id = required("SCI_CLIENT_ID")
-        audience = required("SCI_OIDC_AUDIENCE")
-        grant = os.environ.get(
-            "SCI_OIDC_GRANT_TYPE", "client_credentials"
-        ).strip()
-
-        if grant not in ("client_credentials", "jwt_bearer"):
-            raise POCError("Unsupported SCI_OIDC_GRANT_TYPE.")
-
-        resource = None
-        if grant == "jwt_bearer":
-            resource = required("SCI_OIDC_RESOURCE")
-
-        stage = "github_oidc"
-        assertion = github_jwt(audience)
-
-        form = {
-            "client_id": client_id,
-            "grant_type": "client_credentials",
-            "client_assertion_type": JWT_CLIENT_AUTH,
-            "client_assertion": assertion,
+    if stage == "ias_token":
+        hints = {
+            "invalid_client": (
+                "Check the IAS application client ID and its JWT "
+                "client-authentication issuer, subject and audience."
+            ),
+            "invalid_grant": (
+                "Check assertion validity, corporate-IdP federation "
+                "and helper-user mapping for the selected flow."
+            ),
+            "invalid_request": (
+                "Check the selected flow, required request parameters "
+                "and configured SCIM dependency."
+            ),
+            "unauthorized_client": (
+                "Check whether this IAS application is allowed "
+                "to use the selected grant."
+            ),
+            "unsupported_grant_type": (
+                "Check whether IAS supports the requested grant."
+            ),
+            "invalid_target": (
+                "Check SCI_OIDC_RESOURCE and the application's "
+                "Administration Console SCIM dependency."
+            ),
         }
-
-        if grant == "jwt_bearer":
-            # Experimental: the same GitHub JWT authenticates the client
-            # and represents the federated IAS helper user.
-            form.update({
-                "grant_type": JWT_BEARER_GRANT,
-                "assertion": assertion,
-                "resource": resource,
-            })
-
-        stage = "ias_token"
-        payload = request_json(
-            f"{tenant}/oauth2/token",
-            form=form,
-            label="IAS token exchange",
+        return hints.get(
+            error.oauth_error,
+            "IAS rejected the exchange. Check the OAuth error code, "
+            "application JWT trust, federation and dependency setup.",
         )
 
-        access_token = payload.get("access_token")
-        if (
-            not isinstance(access_token, str)
-            or not access_token
-            or any(c.isspace() for c in access_token)
-        ):
-            raise POCError("IAS did not return a valid access_token.")
-
-        mask(access_token)
-        token_acquired = True
-
-        stage = "scim"
-        result = request_json(
-            f"{tenant}/scim/Users/?count=1&startIndex=1",
-            bearer=access_token,
-            label="SCIM read-only probe",
-        )
-
-        resources = result.get("Resources")
-        if not isinstance(resources, list):
-            raise POCError("SCIM did not return a Resources list.")
-
-        # Never print the token or returned identity records.
-        print(json.dumps({
-            "ok": True,
-            "grant_type": grant,
-            "token_acquired": True,
-            "scim_access": True,
-            "returned_resources": len(resources),
-        }))
-        return 0
-
-    except POCError as exc:
-        print(json.dumps({
-            "ok": False,
-            "stage": stage,
-            "token_acquired": token_acquired,
-            "scim_access": False,
-            "error": str(exc),
-        }))
-        return 1
-
-    except Exception:
-        # Avoid tracebacks containing request/token details.
-        print(json.dumps({
-            "ok": False,
-            "stage": stage,
-            "token_acquired": token_acquired,
-            "scim_access": False,
-            "error": "Unexpected POC failure.",
-        }))
-        return 1
-
-
-if __name__ == "__main__":
-    sys.exit(main())
+    if stage == "scim":
+        return (
+            "IAS issued a token, but SCIM did not accept the request. "
