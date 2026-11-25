@@ -1,0 +1,42 @@
+name: SCI secretless OIDC POC
+
+on:
+  workflow_dispatch:
+    inputs:
+      grant_type:
+        description: "IAS flow to test"
+        required: true
+        default: client_credentials
+        type: choice
+        options:
+          - client_credentials
+          - jwt_bearer
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    # For GitHub Enterprise Server, use your available runner instead:
+    # runs-on: [self-hosted, solinas]
+
+    timeout-minutes: 5
+    environment: sci-oidc-poc
+
+    permissions:
+      contents: read
+      id-token: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run read-only OIDC POC
+        env:
+          SCI_TENANT_URL: ${{ vars.SCI_TENANT_URL }}
+          SCI_CLIENT_ID: ${{ vars.SCI_CLIENT_ID }}
+          SCI_OIDC_AUDIENCE: ${{ vars.SCI_OIDC_AUDIENCE }}
+          SCI_OIDC_RESOURCE: ${{ vars.SCI_OIDC_RESOURCE }}
+          SCI_OIDC_GRANT_TYPE: ${{ inputs.grant_type }}
+        run: python3 sci_oidc_poc.py
