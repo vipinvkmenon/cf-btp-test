@@ -22,7 +22,6 @@ jobs:
     # runs-on: [self-hosted, solinas]
 
     timeout-minutes: 5
-    environment: sci-oidc-poc
 
     permissions:
       contents: read
