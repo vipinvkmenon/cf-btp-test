@@ -233,3 +233,143 @@ def failure_hint(stage, error):
     if stage == "scim":
         return (
             "IAS issued a token, but SCIM did not accept the request. "
+            "An ordinary application token is not automatically an "
+            "IAS administration token. Check the authorization route, "
+            "provider audience and helper-user permissions."
+        )
+
+    return "Check the repository variables and selected grant type."
+
+
+def main():
+    stage = "configuration"
+    token_acquired = False
+    grant = None
+
+    try:
+        tenant = required("SCI_TENANT_URL").rstrip("/")
+        check_https(tenant)
+
+        if urlparse(tenant).query:
+            raise POCError(
+                "SCI_TENANT_URL must not contain a query."
+            )
+
+        client_id = required("SCI_CLIENT_ID")
+        audience = required("SCI_OIDC_AUDIENCE")
+
+        selected_grant = os.environ.get(
+            "SCI_OIDC_GRANT_TYPE", "client_credentials"
+        ).strip()
+
+        if selected_grant not in (
+            "client_credentials",
+            "jwt_bearer",
+        ):
+            raise POCError(
+                "SCI_OIDC_GRANT_TYPE must be "
+                "client_credentials or jwt_bearer."
+            )
+
+        grant = selected_grant
+
+        resource = None
+        if grant == "jwt_bearer":
+            resource = required("SCI_OIDC_RESOURCE")
+
+        stage = "github_oidc"
+        assertion = get_github_jwt(audience)
+
+        form = {
+            "client_id": client_id,
+            "grant_type": "client_credentials",
+            "client_assertion_type": JWT_CLIENT_AUTH,
+            "client_assertion": assertion,
+        }
+
+        if grant == "jwt_bearer":
+            # Experimental principal propagation:
+            # the same JWT authenticates the client and identifies
+            # the federated helper user.
+            form.update({
+                "grant_type": JWT_BEARER_GRANT,
+                "assertion": assertion,
+                "resource": resource,
+            })
+
+        # The client_credentials option deliberately tests ordinary
+        # application authentication without a resource dependency.
+        stage = "ias_token"
+
+        payload = request_json(
+            f"{tenant}/oauth2/token",
+            form=form,
+            label="IAS token exchange",
+        )
+
+        access_token = payload.get("access_token")
+
+        if (
+            not isinstance(access_token, str)
+            or not access_token
+            or any(c.isspace() for c in access_token)
+        ):
+            raise POCError(
+                "IAS did not return a valid access_token."
+            )
+
+        mask(access_token)
+        token_acquired = True
+
+        stage = "scim"
+
+        result = request_json(
+            f"{tenant}/scim/Users/?count=1&startIndex=1",
+            bearer=access_token,
+            label="SCIM read-only probe",
+        )
+
+        resources = result.get("Resources")
+        if not isinstance(resources, list):
+            raise POCError(
+                "SCIM did not return a Resources list."
+            )
+
+        print(json.dumps({
+            "ok": True,
+            "grant_type": grant,
+            "token_acquired": True,
+            "scim_access": True,
+            "returned_resources": len(resources),
+        }))
+        return 0
+
+    except POCError as exc:
+        print(json.dumps({
+            "ok": False,
+            "grant_type": grant,
+            "stage": stage,
+            "token_acquired": token_acquired,
+            "scim_access": False,
+            "http_status": exc.http_status,
+            "oauth_error": exc.oauth_error,
+            "error": str(exc),
+            "hint": failure_hint(stage, exc),
+        }))
+        return 1
+
+    except Exception:
+        # No traceback: exceptions can contain sensitive request data.
+        print(json.dumps({
+            "ok": False,
+            "grant_type": grant,
+            "stage": stage,
+            "token_acquired": token_acquired,
+            "scim_access": False,
+            "error": "Unexpected POC failure.",
+        }))
+        return 1
+
+
+if __name__ == "__main__":
+    sys.exit(main())
